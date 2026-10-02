@@ -1,7 +1,11 @@
 package com.example.ui.screens
 
+import android.Manifest
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.net.Uri
+import android.provider.Settings
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Image
@@ -70,8 +74,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.Strings
+import com.example.ui.components.CameraPermissionRationaleCard
 import com.example.ui.viewmodel.AppScreen
 import com.example.ui.viewmodel.PdfViewModel
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.isGranted
+import com.google.accompanist.permissions.rememberPermissionState
+import com.google.accompanist.permissions.shouldShowRationale
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileOutputStream
@@ -79,7 +88,7 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalPermissionsApi::class)
 @Composable
 fun ScannerScreen(
   viewModel: PdfViewModel,
@@ -91,6 +100,9 @@ fun ScannerScreen(
   val language = settings.language
   val scannedPages by viewModel.scannedPages.collectAsState()
   val isProcessing by viewModel.isProcessing.collectAsState()
+
+  // Accompanist Permissions state for Camera Access
+  val cameraPermissionState = rememberPermissionState(permission = Manifest.permission.CAMERA)
 
   var selectedProfile by remember { mutableStateOf("Document") }
   var selectedFilter by remember { mutableStateOf("ENHANCE") }
@@ -255,6 +267,20 @@ fun ScannerScreen(
                 contentScale = ContentScale.Fit
               )
             }
+          } else if (!cameraPermissionState.status.isGranted) {
+            CameraPermissionRationaleCard(
+              title = "Camera Access for Scanner",
+              message = "Wafa PDF requires camera permission to scan physical documents, detect edges, and capture high-quality pages.",
+              shouldShowRationale = cameraPermissionState.status.shouldShowRationale,
+              onRequestPermission = { cameraPermissionState.launchPermissionRequest() },
+              onOpenSettings = {
+                val intent = Intent(
+                  Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                  Uri.fromParts("package", context.packageName, null)
+                )
+                context.startActivity(intent)
+              }
+            )
           } else {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
               Icon(
@@ -356,7 +382,13 @@ fun ScannerScreen(
               .size(72.dp)
               .clip(CircleShape)
               .background(MaterialTheme.colorScheme.primary)
-              .clickable { cameraLauncher.launch(null) }
+              .clickable {
+                if (cameraPermissionState.status.isGranted) {
+                  cameraLauncher.launch(null)
+                } else {
+                  cameraPermissionState.launchPermissionRequest()
+                }
+              }
               .testTag("scanner_shutter_button"),
             contentAlignment = Alignment.Center
           ) {
